@@ -1,3 +1,7 @@
+# 🚀 Online Documentation
+* **Live Repository:** You can view the full, rendered technical documentation and project files in my GitHub repository: **[Supplier Invoice Ingestion Pipeline (GitHub)](https://github.com/LiamMunsamy/supplier-invoice-ingestion)**
+
+---
 # Supplier Invoice Ingestion Pipeline
 
 An automated backend data pipeline built in n8n that monitors an inbox for supplier invoice batches via CSV, performs robust validation checks, prevents duplicate data insertion, logs records directly to a Microsoft SQL Server database, and dispatches a metrics digest email.
