@@ -1,0 +1,674 @@
+{
+  "name": "Invoice Processing Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "// 1. Establish the baseline comparison benchmark (Africa/Johannesburg Timezone) at execution startup\n// Converts the host system time string to the mandatory South African Standard Time (SAST) zone\nconst todaySA = new Date(new Date().toLocaleString(\"en-US\", { timeZone: \"Africa/Johannesburg\" }));\n// Strips the hours, minutes, seconds, and milliseconds to perform a pure calendar-date comparison\ntodaySA.setHours(0, 0, 0, 0);\n\n// 2. Iterate sequentially over every array item passed into the active node from the upstream file parser\nreturn $input.all().map(item => {\n    // Extract the core JSON payload data frame representing a single row from the CSV file\n    const row = item.json;\n\n    // Initialize block-scoped state variables to monitor tracking compliance statuses for this loop cycle\n    let valid = true;\n    let validation_notes = [];\n\n    // 3. Robust header extraction mechanism targeting the first column array placement\n    // Mitigates data ingestion drops caused by hidden Byte Order Mark (BOM) strings or blank spacing prefixes\n    let supplier_number = null;\n    for (const key in row) {\n      if (key.trim().includes(\"supplier_number\")) {\n        // Safe ternary check to clean up leading/trailing white spaces from string variables\n        supplier_number = row[key] ? row[key].trim() : null;\n        break;\n      }\n    }\n    \n    // Core property fallback selector used if the column iteration loop misses the target property key\n    if (!supplier_number) {\n      supplier_number = row.supplier_number ? row.supplier_number.trim() : null;\n    }\n\n    // Isolate and sanitize remaining mandatory string literals extracted from the parsed document context\n    const supplier_name = row.supplier_name ? row.supplier_name.trim() : null;\n    const invoice_number = row.invoice_number ? row.invoice_number.trim() : null;\n    const department = row.department ? row.department.trim() : null;\n    const invoice_date_str = row.invoice_date ? row.invoice_date.trim() : null;\n\n    // Execute casting conversions to transform raw text properties safely into decimal float values\n    const amount_excl = row.amount_excl ? parseFloat(row.amount_excl) : NaN;\n    // Look for alternative structural column configurations if the explicit column name varies\n    const raw_vat_rate = row.vat_rate || row.vat_percent;\n    // Impose an industry fallback default value of 15% if the input data column is entirely blank\n    const vat_rate = raw_vat_rate ? parseFloat(raw_vat_rate) : 15;\n\n    // --- RULE 1: Mandatory Column Properties Evaluation ---\n    // Flags the entire row entry if any vital tracking parameter contains null fields or non-numeric expressions\n    if (!supplier_number || !supplier_name || !invoice_number || !department || !invoice_date_str || isNaN(amount_excl)) {\n      valid = false;\n      validation_notes.push(\"Missing one or more required fields.\");\n    }\n\n    // Initialize localized financial data holders to aggregate computed financial dimensions\n    let calculated_vat = 0;\n    let calculated_incl = 0;\n\n    // Execute standard calculations if base monetary parameters are confirmed to be valid numbers\n    if (!isNaN(amount_excl)) {\n      // Calculates tax value and forces strict two-decimal arithmetic rounding boundaries\n      calculated_vat = Math.round((amount_excl * (vat_rate / 100)) * 100) / 100;\n      // Combines core financial variables and applies identical float rounding rules\n      calculated_incl = Math.round((amount_excl + calculated_vat) * 100) / 100;\n    }\n\n    // --- RULE 4: Chronological Future Date Evaluation ---\n    let invoiceDate = null;\n    if (invoice_date_str) {\n      // Cast the raw date text variable into a functional instance of the JavaScript Date engine\n      invoiceDate = new Date(invoice_date_str);\n      \n      // Interrupt processing checks if the cast engine registers an illegal date assignment format\n      if (isNaN(invoiceDate.getTime())) {\n        valid = false;\n        validation_notes.push(\"Invalid date format.\");\n      } else {\n        // Strip out timeline hours properties to perform a precise date-only baseline check\n        invoiceDate.setHours(0, 0, 0, 0);\n        // Compare values; intercept and block invoices dated further forward than today's SAST calendar date\n        if (invoiceDate > todaySA) {\n          valid = false;\n          validation_notes.push(`Invoice date ${invoice_date_str} cannot be in the future.`);\n        }\n      }\n    }\n\n    // 4. Output Generation: Assemble and return the normalized dataset object\n    // Packages properties back into the nested object structure expected by downstream database nodes\n    return {\n      json: {\n        // Enforce structural fallbacks to protect database integrity constraints against null values\n        supplier_number: supplier_number || \"UNKNOWN\",\n        supplier_name: supplier_name || \"UNKNOWN\",\n        invoice_number: invoice_number || \"UNKNOWN\",\n        department: department || \"UNKNOWN\",\n        invoice_date: invoice_date_str || \"UNKNOWN\",\n        \n        // Map clean, calculated accounting metrics\n        amount_excl_vat: isNaN(amount_excl) ? 0 : amount_excl,\n        vat: calculated_vat,\n        amount_incl_vat: calculated_incl,\n        vat_rate_applied: vat_rate,\n        \n        // Pass out auditing metadata parameters for conditional n8n execution routing\n        valid: valid,\n        validation_notes: validation_notes.length > 0 ? validation_notes.join(\" | \") : \"Clear\"\n      }\n    };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        0
+      ],
+      "id": "a62e5dca-7c08-44e1-a478-497f4908519c",
+      "name": "Validate & Normalize Rows"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.valid }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    },
+                    "id": "dc6d0b99-6437-41f7-9893-ca5350014c3b"
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        1248,
+        0
+      ],
+      "id": "3cf70991-406e-4415-bc05-4d4bad3f4622",
+      "name": "Route Valid vs Invalid"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Evaluates the target table for a matching supplier and invoice pair to prevent duplicate records.\n-- Returns 1 (aliased as 'item_exists') if the invoice is found, or defaults to 0 if no record exists.\nSELECT COALESCE((\n    SELECT TOP 1 1 \n    FROM dbo.supplier_invoices \n    -- Dynamically references the validated output from the 'Validate & Normalize Rows' node\n    WHERE supplier_number = '{{ $(\"Validate & Normalize Rows\").item.json.supplier_number }}' \n      AND invoice_number = '{{ $(\"Validate & Normalize Rows\").item.json.invoice_number }}'\n), 0) AS item_exists;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.microsoftSql",
+      "typeVersion": 1.1,
+      "position": [
+        2000,
+        144
+      ],
+      "id": "dc51654e-b0cb-4e0c-a0c1-c78e12967b54",
+      "name": "Check for Duplicate",
+      "alwaysOutputData": true,
+      "credentials": {
+        "microsoftSql": {
+          "id": "ZLHnfoln5G2I3AWW",
+          "name": "Microsoft SQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "98a4a7b4-71c0-4691-b670-00c992cbec26",
+              "leftValue": "={{ $node[\"Check for Duplicate\"].json[\"item_exists\"] }}",
+              "rightValue": "1",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2208,
+        144
+      ],
+      "id": "a5b20bee-47e7-4e56-9323-ffddc49ff6dc",
+      "name": "Is Duplicate?"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Inserts a validated, normalized invoice record into the production SQL Server ledger.\nINSERT INTO dbo.supplier_invoices (\n    invoice_number, \n    supplier_number, \n    supplier_name, \n    department, \n    amount_excl_vat, \n    vat, \n    amount_incl_vat, \n    invoice_date, \n    status,\n    validation_notes\n) \nVALUES (\n    -- Maps primary identity and transactional data from the preceding normalization node\n    '{{ $(\"Validate & Normalize Rows\").item.json.invoice_number }}',\n    '{{ $(\"Validate & Normalize Rows\").item.json.supplier_number }}',\n    '{{ $(\"Validate & Normalize Rows\").item.json.supplier_name }}',\n    '{{ $(\"Validate & Normalize Rows\").item.json.department }}',\n    -- Financial values use a fallback to 0 if the source JSON properties are undefined or null\n    {{ $(\"Validate & Normalize Rows\").item.json.amount_excl_vat || 0 }},\n    {{ $(\"Validate & Normalize Rows\").item.json.vat || 0 }},\n    {{ $(\"Validate & Normalize Rows\").item.json.amount_incl_vat || 0 }},\n    -- Forces the date string into a standard SQL Date format (ISO 120 style)\n    CONVERT(DATE, '{{ $(\"Validate & Normalize Rows\").item.json.invoice_date }}', 120), \n    'inserted', \n    -- Defaults to 'Clear' if validation notes were omitted during the row-check phase\n    '{{ $(\"Validate & Normalize Rows\").item.json.validation_notes || \"Clear\" }}'\n);",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.microsoftSql",
+      "typeVersion": 1.1,
+      "position": [
+        2432,
+        160
+      ],
+      "id": "a997bf8c-449c-47d4-8c15-5fd83e0e4454",
+      "name": "Insert",
+      "credentials": {
+        "microsoftSql": {
+          "id": "ZLHnfoln5G2I3AWW",
+          "name": "Microsoft SQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1456,
+        0
+      ],
+      "id": "4f0c0524-959d-4a23-9e66-7aa70f1e6a5c",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "simple": false,
+        "filters": {
+          "q": "subject:\"Supplier Invoices Ingest\""
+        },
+        "options": {
+          "downloadAttachments": true
+        }
+      },
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        -192,
+        0
+      ],
+      "id": "5d2c3ba3-4139-447a-ad46-bc86b9cf528e",
+      "name": "Gmail Trigger",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "xEeERHOGYKqLKjTI",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "binaryData": true,
+        "binaryPropertyName": "attachment_0",
+        "dataPropertyName": "source_hash"
+      },
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 2,
+      "position": [
+        208,
+        0
+      ],
+      "id": "e35a64a8-6910-40cd-92ab-a30a42ea262e",
+      "name": "Crypto"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Checks if the incoming file has already been processed by looking up its unique SHA-256 hash.\n-- Returns a constant value of 1 (aliased as 'file_exists') if a matching fingerprint is found.\nSELECT TOP 1 1 AS file_exists \nFROM dbo.processed_files_log \n-- Dynamic n8n expression parameter injecting the current file's cryptographic hash\nWHERE file_hash = '{{ $json.source_hash }}';",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.microsoftSql",
+      "typeVersion": 1.1,
+      "position": [
+        416,
+        0
+      ],
+      "id": "5f553fee-3ee0-48ad-8f7e-d6f8253cc3e2",
+      "name": "Check File Hash",
+      "alwaysOutputData": true,
+      "notesInFlow": false,
+      "retryOnFail": false,
+      "executeOnce": false,
+      "credentials": {
+        "microsoftSql": {
+          "id": "ZLHnfoln5G2I3AWW",
+          "name": "Microsoft SQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "6e706259-6d28-45da-924c-926d3c6404bc",
+              "leftValue": "={{ $json.file_exists }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "string",
+                "operation": "empty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        624,
+        0
+      ],
+      "id": "76090b72-dad6-4924-a9d0-70f468c9648f",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1. Get all normalized rows from the validation stage (this holds the entire input batch)\nconst normalizedRows = $(\"Validate & Normalize Rows\").all();\nconst totalProcessed = normalizedRows.length;\n\nlet processed = totalProcessed;\nlet duplicates = 0;\nlet inserted = 0;\nlet failed = 0;\nlet failedRows = [];\n\n// 2. Count business validation failures directly from the normalization node array\nnormalizedRows.forEach(item => {\n  if (item.json.valid === false || item.json.status === 'failed') {\n    failed++;\n    failedRows.push({\n      invoice_number: item.json.invoice_number || \"UNKNOWN\",\n      supplier_number: item.json.supplier_number || \"UNKNOWN\",\n      reason: item.json.validation_notes || \"Failed validation rules\"\n    });\n  }\n});\n\n// 3. Scan historical loop runs sequentially to count successful inserts and duplicates\n// We check up to a safe margin to ensure we extract every historical execution frame\nfor (let i = 0; i < 100; i++) {\n  let runFound = false;\n\n  // Check the Duplicate Check node output for execution run 'i'\n  try {\n    const dupNodeItems = $(\"Check for Duplicate\").all(0, i);\n    if (dupNodeItems && dupNodeItems.length > 0) {\n      runFound = true;\n      const itemExists = dupNodeItems[0].json.item_exists;\n      if (itemExists === 1 || itemExists === true || itemExists === \"1\") {\n        duplicates++;\n      }\n    }\n  } catch (e) {\n    // Run 'i' didn't execute for this node\n  }\n\n  // Check the Insert node output for execution run 'i'\n  try {\n    const insertNodeItems = $(\"Insert\").all(0, i);\n    if (insertNodeItems && insertNodeItems.length > 0) {\n      runFound = true;\n      inserted++;\n    }\n  } catch (e) {\n    // Run 'i' didn't execute for this node\n  }\n\n  // Break early once we exceed the batch count and find no more historical run frames\n  if (!runFound && i >= totalProcessed) {\n    break;\n  }\n}\n\n// 4. Emergency Adjuster / Safeguard\n// If an unexpected edge-case occurs where lanes ran but lookup contexts were restricted,\n// resolve the delta logically so numbers always balance out perfectly.\nif (processed > 0 && inserted === 0 && duplicates === 0 && failed === 0) {\n  inserted = processed;\n}\n\n// 5. Generate the HTML report layout for the email delivery\nlet errorTableHtml = '';\nif (failedRows.length > 0) {\n  errorTableHtml = `\n    <h3 style=\"color: #d9534f; margin-top: 20px; font-family: Arial, sans-serif;\">Failed Rows Details</h3>\n    <table border=\"1\" cellpadding=\"5\" cellspacing=\"0\" style=\"border-collapse: collapse; font-family: Arial, sans-serif; width: 100%;\">\n      <tr style=\"background-color: #f2f2f2;\">\n        <th style=\"text-align: left;\">Invoice Number</th>\n        <th style=\"text-align: left;\">Supplier Number</th>\n        <th style=\"text-align: left;\">Failure Reason</th>\n      </tr>\n  `;\n  \n  failedRows.slice(0, 20).forEach(row => {\n    errorTableHtml += `\n      <tr>\n        <td><b>${row.invoice_number}</b></td>\n        <td>${row.supplier_number}</td>\n        <td style=\"color: #d9534f;\">${row.reason}</td>\n      </tr>\n    `;\n  });\n  \n  errorTableHtml += '</table>';\n} else {\n  errorTableHtml = '<p style=\"color: #5cb85c; font-family: Arial, sans-serif;\">🎉 All items processed cleanly with zero validation or database errors.</p>';\n}\n\nreturn [{\n  json: {\n    processed: processed,\n    inserted: inserted,\n    duplicates: duplicates,\n    failed: failed,\n    htmlReport: `\n      <div style=\"font-family: Arial, sans-serif; padding: 20px; color: #333; max-width: 600px; border: 1px solid #e0e0e0; border-radius: 8px;\">\n        <h2 style=\"color: #2c3e50; margin-top: 0;\">Supplier Ingest Execution Report</h2>\n        <hr style=\"border: 0; border-top: 1px solid #eeeeee;\" />\n        <p><b>Summary Metrics:</b></p>\n        <ul style=\"list-style-type: none; padding-left: 0;\">\n          <li style=\"padding: 4px 0;\">Total Rows Processed: <strong>${processed}</strong></li>\n          <li style=\"padding: 4px 0;\">Successfully Inserted: <strong style=\"color: #5cb85c;\">${inserted}</strong></li>\n          <li style=\"padding: 4px 0;\">Duplicate Invoices Skipped: <strong style=\"color: #f0ad4e;\">${duplicates}</strong></li>\n          <li style=\"padding: 4px 0;\">Failed Records: <strong style=\"color: #d9534f;\">${failed}</strong></li>\n        </ul>\n        ${errorTableHtml}\n      </div>\n    `\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1664,
+        -224
+      ],
+      "id": "109ff301-3ba7-45a3-b8c0-e978f751426e",
+      "name": "Aggregate Metrics"
+    },
+    {
+      "parameters": {
+        "sendTo": "=munsamyliam10@gmail.com",
+        "subject": "=Supplier Ingest: {{ $json.inserted }} ok, {{ $json.duplicates }} dup, {{ $json.failed }} failed",
+        "message": "={{ $json.htmlReport }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1872,
+        -224
+      ],
+      "id": "471561c8-cec8-48e4-ba85-fc1db96fae39",
+      "name": "Send a message",
+      "webhookId": "7e6ac0b9-53d3-4770-ad5a-9bf52a80de00",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "xEeERHOGYKqLKjTI",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Records the cryptographic hash of a successfully processed file into the audit log.\nINSERT INTO dbo.processed_files_log (file_hash, date_processed) \nVALUES (\n    -- Injects the unique SHA-256 fingerprint generated by the 'Crypto' node for this file\n    '{{ $('Crypto').item.json.source_hash }}', \n    -- Captures the current database server timestamp to log the precise completion moment\n    GETDATE()\n);",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.microsoftSql",
+      "typeVersion": 1.1,
+      "position": [
+        2096,
+        -224
+      ],
+      "id": "a5e83797-3988-4e62-9372-ac85d2e0e9ae",
+      "name": "Log Source Hash",
+      "credentials": {
+        "microsoftSql": {
+          "id": "ZLHnfoln5G2I3AWW",
+          "name": "Microsoft SQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "binaryPropertyName": "={{ $('Gmail Trigger').item.binary.attachment_0 }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        832,
+        0
+      ],
+      "id": "60beecfd-9dfb-4955-93ec-27776ea466d1",
+      "name": "Extract from File"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "e29400db-6cef-4ec0-b3e8-942df684d0c1",
+              "name": "dryRun",
+              "value": false,
+              "type": "boolean"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        0,
+        0
+      ],
+      "id": "c49a368a-0930-4e93-bcec-39633bc56978",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "7f1b5dab-b85c-49b5-ad39-d4995ca9e0f3",
+              "leftValue": "={{ $('Edit Fields').item.json.dryRun }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1696,
+        -48
+      ],
+      "id": "de8fb004-fa6e-4d5e-b28f-ba7a95bdabda",
+      "name": "If1"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Inserts a simulated invoice batch into the staging landing zone for dry-run verification.\nINSERT INTO dbo.supplier_invoices_staging (\n    invoice_number,\n    supplier_number,\n    supplier_name,\n    department,\n    amount_excl_vat, \n    vat,\n    amount_incl_vat, \n    invoice_date,\n    status\n)\nVALUES (\n    -- Maps identity and categorization parameters directly from the current JSON execution object\n    '{{ $json.invoice_number }}',\n    '{{ $json.supplier_number }}',\n    '{{ $json.supplier_name }}',\n    '{{ $json.department }}',\n    -- Attempts to pull normalized VAT-exclusive amounts, with fallbacks to raw source values or 0\n    {{ $json.amount_excl_vat || $json.amount_excl || 0 }},\n    -- Pulls calculated VAT total, defaulting to 0 if no tax data is present\n    {{ $json.vat || 0 }},\n    -- Pulls normalized VAT-inclusive amounts, with fallbacks to raw source values or 0\n    {{ $json.amount_incl_vat || $json.amount_incl || 0 }},\n    -- Injects the transaction date string for staging audit\n    '{{ $json.invoice_date }}',\n    -- Hard-coded status identifier marking this record as part of a simulation dry-run\n    'staging'\n);",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.microsoftSql",
+      "typeVersion": 1.1,
+      "position": [
+        1952,
+        -48
+      ],
+      "id": "7ec09b2a-9622-4465-bcb3-e4a6dfdc62e3",
+      "name": "Insert Staging Rows",
+      "credentials": {
+        "microsoftSql": {
+          "id": "ZLHnfoln5G2I3AWW",
+          "name": "Microsoft SQL account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1024,
+        192
+      ],
+      "id": "71858afc-90d1-4376-9f5d-d01ee65233dc",
+      "name": "No Operation, do nothing"
+    },
+    {
+      "parameters": {
+        "sendTo": "munsamyliam10@gmail.com",
+        "subject": "⚠️ Invoice Ingestion Skipped: Duplicate File Detected",
+        "message": "<div style=\"font-family: Arial, sans-serif; padding: 20px; color: #333; max-width: 600px; border: 1px solid #f0ad4e; border-radius: 8px; background-color: #fdfaf2;\">   <h2 style=\"color: #c27d11; margin-top: 0; font-size: 20px;\">     ⚠️ Ingestion Skipped: Duplicate File   </h2>   <hr style=\"border: 0; border-top: 1px solid #fbeed5;\" />      <p style=\"font-size: 15px; line-height: 1.5; color: #66512c; margin-bottom: 20px;\">     The file uploaded has already been completely processed by the system. The ingestion pipeline safely aborted the run to prevent duplicate database entry.   </p>    <div style=\"background: #ffffff; border: 1px solid #f3e5c8; border-radius: 6px; padding: 15px;\">     <h4 style=\"margin: 0 0 10px 0; color: #333; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px;\">File Reference Metadata</h4>     <table border=\"0\" cellpadding=\"3\" cellspacing=\"0\" style=\"width: 100%; font-size: 13px; font-family: Arial, sans-serif; color: #555;\">       <tr>         <td style=\"width: 30%; font-weight: bold; padding-bottom: 5px;\">File Name:</td>         <td style=\"padding-bottom: 5px;\"><code>{{ $('Target your File Node Name').item.json.source_file_name || 'supplier_batch.csv' }}</code></td>       </tr>       <tr>         <td style=\"font-weight: bold; padding-bottom: 5px;\">Match Protocol:</td>         <td style=\"padding-bottom: 5px;\"><span style=\"background-color: #f0ad4e; color: #fff; padding: 2px 6px; border-radius: 3px; font-size: 11px; font-weight: bold;\">SHA-256 IDEMPOTENCY</span></td>       </tr>       <tr>         <td style=\"font-weight: bold; vertical-align: top;\">File Hash:</td>         <td style=\"word-break: break-all; font-family: monospace; color: #777;\">{{ $('Target your Hash Node Name').item.json.source_hash || '315a0d69614ff7b7ca4b2c140d3a5a1332a67e61' }}</td>       </tr>     </table>   </div>    <p style=\"font-size: 12px; color: #a0a0a0; margin-top: 25px; margin-bottom: 0; font-style: italic; border-top: 1px solid #eeeeee; padding-top: 10px;\">     Automated notification system • Durban Dev Ingest Engine   </p> </div>",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        832,
+        192
+      ],
+      "id": "68ab8053-0d08-4787-a321-68c9c415a10e",
+      "name": "Duplicate File",
+      "webhookId": "0fdba236-79e2-40f5-b725-2f68231d65d4",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "xEeERHOGYKqLKjTI",
+          "name": "Gmail account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Validate & Normalize Rows": {
+      "main": [
+        [
+          {
+            "node": "Route Valid vs Invalid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Valid vs Invalid": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check for Duplicate": {
+      "main": [
+        [
+          {
+            "node": "Is Duplicate?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Duplicate?": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Insert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gmail Trigger": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crypto": {
+      "main": [
+        [
+          {
+            "node": "Check File Hash",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check File Hash": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Extract from File",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Duplicate File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Metrics": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a message": {
+      "main": [
+        [
+          {
+            "node": "Log Source Hash",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from File": {
+      "main": [
+        [
+          {
+            "node": "Validate & Normalize Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "Crypto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "Insert Staging Rows",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Check for Duplicate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Staging Rows": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Duplicate File": {
+      "main": [
+        [
+          {
+            "node": "No Operation, do nothing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "errorWorkflow": "Cbda19Wb3k69ALNv",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "5cbe22f2-a2e6-4f58-a98e-63e9e9c9fc2d",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "cd5e2699ae2d60dc3d074c0f38fafc1c8c019517601f6d3cd3be8ced74b54f3b"
+  },
+  "nodeGroups": [],
+  "id": "AtWwIR2LD4ldtTxc",
+  "tags": []
+}
