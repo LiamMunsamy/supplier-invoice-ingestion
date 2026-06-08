@@ -176,29 +176,25 @@ This table shows exactly how the batch rows from your expanded testing data file
 | `S004` | `FUT-884` | `0` (False) | Invoice date cannot be in the future. | Filtered / Logged to failures |
 
 ---
-
 ## 8. Pipeline Execution Verification & Screenshots
 
 Below are the actual pipeline testing screenshots showing how the system reacts in real time to processing requests, duplicates, and communication handling.
 
 ### Screenshot 1: Successful Batch Insert
-
 *Captured when a brand new, unique file is sent. The workflow passes the hash gate, loops through all valid line items, and writes them straight to your database.*
-
+![Successful Insert](Screenshot 2026-06-07 201553.png)
 
 ### Screenshot 2: Duplicate File Skip (Early Exit)
-
 *Captured when the exact same file batch is resent. The workflow calculates the matching file hash, evaluates to `false` at the early check gate, and instantly terminates processing to protect database integrity.*
-
+![Duplicate Skip](Screenshot 2026-06-07 201816.png)
 
 ### Screenshot 3: Automated Execution Email Summary Report
-
 *The clean HTML notification report received inside the mailbox showing aggregate metrics and runtime execution summaries after a processing pass completes.*
-
+![Email Alert](Screenshot 2026-06-07 202010.png)
 
 ### Database Verification: Target SQL Server Results Grid
-
 *Direct data verification grid pulled straight from SQL Server Management Studio (SSMS) confirming data landing states.*
+![DB Query Screenshot](Screenshot 2026-06-07 202627.png)
 
 
 ```
