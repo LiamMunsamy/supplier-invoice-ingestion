@@ -204,8 +204,7 @@ Below are the actual pipeline testing screenshots showing how the system reacts 
 ### Database Verification: Target SQL Server Results Grid
 *Direct data verification grid pulled straight from SQL Server Management Studio (SSMS) confirming that the records landed cleanly with the correct tracking statuses and validation notes.*
 
-![DB Query Screenshot](Screenshot%202026-06-07%20202010.png)
-
+![DB Query Screenshot](Screenshot%202026-06-08%20172928.png)
 ```
 
 
