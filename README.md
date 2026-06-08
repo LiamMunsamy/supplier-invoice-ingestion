@@ -182,21 +182,24 @@ Below are the actual pipeline testing screenshots showing how the system reacts 
 
 ### Screenshot 1: Successful Batch Insert
 *Captured when a brand new, unique file is sent. The workflow passes the hash gate, loops through all valid line items, and writes them straight to your database.*
-![Successful Insert](Screenshot 2026-06-07 201553.png)
+
+![Successful Insert](Screenshot%202026-06-07%20201553.png)
 
 ### Screenshot 2: Duplicate File Skip (Early Exit)
 *Captured when the exact same file batch is resent. The workflow calculates the matching file hash, evaluates to `false` at the early check gate, and instantly terminates processing to protect database integrity.*
-![Duplicate Skip](Screenshot 2026-06-07 201816.png)
+
+![Duplicate Skip](Screenshot%202026-06-07%20202627.png)
 
 ### Screenshot 3: Automated Execution Email Summary Report
 *The clean HTML notification report received inside the mailbox showing aggregate metrics and runtime execution summaries after a processing pass completes.*
-![Email Alert](Screenshot 2026-06-07 202010.png)
+
+![Email Alert](Screenshot%202026-06-07%20201816.png)
 
 ### Database Verification: Target SQL Server Results Grid
 *Direct data verification grid pulled straight from SQL Server Management Studio (SSMS) confirming data landing states.*
-![DB Query Screenshot](Screenshot 2026-06-07 202627.png)
+
+![DB Query Screenshot](Screenshot%202026-06-07%20202010.png)
 
 
 ```
 
-```
