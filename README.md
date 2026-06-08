@@ -119,7 +119,7 @@ Configure your Microsoft SQL Server transaction nodes using these parameters:
 * **Database Name:** `SupplierIngestDB`
 * **Authentication Method:** `SQL Server Authentication`
 * **User (User ID):** `sa` *(System Administrator Account)*
-* **Password:** `[Securely Hidden / Encrypted by n8n]`
+* **Password:** `YourPassword123`
 
 *Developer Environment Note:* If testing inside a local environment against **SQL Server Express (`.\SQLEXPRESS`)**, ensure that the TCP/IP protocol is explicitly enabled within the *SQL Server Configuration Manager* utility and port `1433` is unblocked to receive inbound engine listener connections.
 
@@ -296,4 +296,14 @@ Below is the verification trace showing the global exception management engine m
 * **Verification Interface:** Query lookup targeting the log database via SQL Server Management Studio (SSMS).
 * **Audit Trail Confirmation:** Validates that the crash handler caught the pipeline exception and successfully generated a failure record.
 * **System Diagnostics Saved:** Confirms the exact missing column error message and node location were successfully locked into the table with `retry_count` initialized.
+
+***
+
+#### Step 10.3: Incident Alert Notification (Gmail Inbox View)
+![Global Error Handler Email Alert](Screenshot%202026-06-08%20183656.png)
+* **Delivery Trigger:** Dispatched instantly when an unhandled exception triggers the asynchronous error isolation pipeline.
+* **Diagnostic Data Payload:** The notification email dynamically parses and structures critical system information:
+  * **Workflow Name:** Identifies exactly which pipeline experienced the fault (e.g., `Example Workflow`).
+  * **Execution ID:** Provides the unique tracking reference key (e.g., `231`) for rapid search mapping within the n8n execution history logs.
+  * **Error Exception Context:** Exposes the raw system error log output message directly to the administrator's dashboard, bypassing the need to log directly into the server database for initial triage.
 
